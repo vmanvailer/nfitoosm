@@ -1,0 +1,28 @@
+SIMULATION
+ YEARS 100 	# of years to simulate stand for
+ YPC 5		# of years per simulation cycle
+
+#Database location 
+#Relative file paths can be used thoughout OSM code (relative to this file's location)
+INPUTS.SOURCE "..\PlotData_NL.sqlite"	
+#INPUTS.SOURCE "..\PlotData_NL.accdb"	
+
+
+OUTPUTS
+ Messages TRUE
+ StandSummary.ConsoleOn TRUE
+ StandSummary.FilePath StandListProjections.csv
+ TreeList.FilePath TreeListProjections.csv  
+
+
+#''' Base simulation of Survey ID 6760
+SIMULATION.Scenario BASE
+SIMULATE 1
+
+#To simulate all stands, just use SIMULATE with no survey ID filter
+#'''
+
+
+
+ 
+

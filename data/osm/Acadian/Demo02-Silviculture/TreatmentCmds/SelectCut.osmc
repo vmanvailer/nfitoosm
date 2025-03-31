@@ -1,0 +1,60 @@
+Species
+ Groups
+  Spruce 	WS RS BS NS
+  SpruceFir Spruce BF 
+  Oak		RO BR BO WO		    #Red, Bur, Black, White
+  IHW 		WA GA BA RM WB OH	#Aspen, Red Maple, White Birch, Other (non-comm) hardwood
+  
+ Ranks
+  SpeciesCutPriority
+   #1. Balsam Fir
+   BF 100
+   #2. Beech
+   AB 100
+   #3. Aspen / Red Maple / White Birch
+   IHW 10
+   #4. Hemlock
+   EH   0
+   #5. Intolerant Spruce
+   WS -10
+   BS -10
+   NS -10
+   #Red Spruce & White Pine
+   RS -20
+   WP -20
+   #6. Yellow Birch
+   YB  -25
+   Oak -25
+   #7. Sugar Maple
+   SM -30 
+   #8. Cedar
+   EC -30 
+
+Actions
+ def SelectCut
+  
+  Operable 
+   BA >= 24 with DBH >= 8
+   GMV >= 100 with DBH >= 8
+   
+  Lock 5
+  
+  Stand
+   Management PartialCut
+    
+  Cut 0
+
+   Priority
+    SpeciesCutPriority 1
+    #BINS 2000
+    DISORDER 20%
+ 
+   Trails 20% 1% #After 1st entry, trails = 1% of cut
+   
+   Retention
+    #J distribution (Q = 1.4, Min Residual BA = 16, Max DBH = 60)
+    J 1.4 16 with DBH <= 60 
+	#Minimum residual basal area:
+    BA >= 16 with DBH 8 60
+
+   

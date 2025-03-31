@@ -1,0 +1,130 @@
+Species
+ Groups
+  Spruce 	WS RS BS NS
+  SpruceFir Spruce BF 
+  Oak		RO BR BO WO		    #Red, Bur, Black, White
+  IHW 		WA GA BA RM WB OH	#Aspen, Red Maple, White Birch, Other (non-comm) hardwood
+  TOL       YB SM AB RS EH EC HH MM MA BW    # Tolerant Species  
+  TOL2      YB SM RS EH EC   
+ Ranks
+  SpeciesCutPriority
+   #1. Balsam Fir
+   BF 100
+   #2. Beech
+   AB 100
+   #3. Aspen / Red Maple / White Birch
+   IHW 10
+   #4. Hemlock
+   EH   0
+   #5. Intolerant Spruce
+   WS -10
+   BS -10
+   NS -10
+   #Red Spruce & White Pine
+   RS -20
+   WP -20
+   #6. Yellow Birch
+   YB  -25
+   Oak -25
+   #7. Sugar Maple
+   SM -30 
+   #8. Cedar
+   EC -30 
+
+Actions
+ def ClearCut  
+  Operable 0
+   BA >= 15 with DBH >= 9
+   BA >= 5 in TOL with DBH >= 9
+   #GMV >= 100 with DBH >= 9
+   #Cycle >= 0  #For FORUS
+  Lock 16
+     
+  Cut 0
+   Priority
+    SpeciesCutPriority 1
+    Risk 2   
+    Grade -1
+    DBH 10
+   
+   Retention
+	#Minimum residual basal area:
+    Trees >= 80% with DBH < 5
+  Stand
+   #Change STAMAN calibration to partial cut response
+   Management ClearCut
+
+ # Medium  openings (edge) no SM in overstory 10 years post treatment 
+  Recruit 1  
+   Seed	ABBA	500.00	DBH	1.00
+   Seed	ABBA	50.00	DBH	1.70
+   Seed	ABBA	250.00	DBH	3.00
+   Seed	ABBA	50.00	DBH	3.50
+   Seed	ABBA	150.00	DBH	5.00
+   Seed	ABBA	50.00	DBH	7.00
+   Seed	ABBA	50.00	DBH	9.00
+   Seed	ABBA	50.00	DBH	10.50
+   Seed	ACPE	1050.00	DBH	1.00
+   Seed	ACPE	50.00	DBH	2.10
+   Seed	ACPE	50.00	DBH	2.60
+   Seed	ACPE	350.00	DBH	3.00
+   Seed	ACPE	50.00	DBH	3.80
+   Seed	ACPE	50.00	DBH	4.10
+   Seed	ACPE	50.00	DBH	4.90
+   Seed	ACPE	100.00	DBH	5.00
+   Seed	ACPE	50.00	DBH	7.00
+   Seed	ACRU	350.00	DBH	1.00
+   Seed	ACRU	1050.00	DBH	3.00
+   Seed	ACRU	50.00	DBH	3.30
+   Seed	ACRU	150.00	DBH	5.00
+   Seed	ACRU	50.00	DBH	7.00
+   Seed	ACRU	100.00	DBH	9.00
+   Seed	ACRU	50.00	DBH	11.00
+   Seed	ACRU	50.00	DBH	11.10
+   Seed	ACRU	50.00	DBH	11.90
+   Seed	ACRU	50.00	DBH	12.00
+   Seed	ACSA3	500.00	DBH	1.00
+   Seed	ACSA3	300.00	DBH	3.00
+   Seed	ACSA3	50.00	DBH	3.60
+   Seed	ACSA3	100.00	DBH	5.00
+   Seed	ACSA3	50.00	DBH	5.20
+   Seed	BEAL2	400.00	DBH	1.00
+   Seed	BEAL2	50.00	DBH	2.50
+   Seed	BEAL2	450.00	DBH	3.00
+   Seed	BEAL2	50.00	DBH	4.20
+   Seed	BEAL2	100.00	DBH	5.00
+   Seed	BEAL2	50.00	DBH	5.60
+   Seed	BEAL2	250.00	DBH	7.00
+   Seed	BEAL2	150.00	DBH	9.00
+   Seed	BEAL2	50.00	DBH	9.50
+   Seed	BEPA	50.00	DBH	8.20
+   Seed	FAGR	4300.00	DBH	1.00
+   Seed	FAGR	50.00	DBH	2.20
+   Seed	FAGR	50.00	DBH	2.40
+   Seed	FAGR	800.00	DBH	3.00
+   Seed	FAGR	50.00	DBH	3.70
+   Seed	FAGR	50.00	DBH	5.00
+   Seed	FAGR	50.00	DBH	6.50
+   Seed	FAGR	50.00	DBH	7.00
+   Seed	PIMA	100.00	DBH	1.00
+   Seed	PIMA	50.00	DBH	2.10
+   Seed	PIMA	200.00	DBH	3.00
+   Seed	PIMA	50.00	DBH	3.50
+   Seed	PRPE2	50.00	DBH	4.00
+   Seed	PRPE2	50.00	DBH	5.00
+   Seed	PRPE2	50.00	DBH	9.40
+   Seed	SOAM3	50.00	DBH	1.00
+   Seed	SOAM3	50.00	DBH	1.20
+
+  
+ def RemoveSap  #removes existing saplings <=8cm to prepare for recruitment 
+  Operable 1
+   #Cycle >= 0  
+  Lock 50
+  Cut 0
+   Priority
+    DBH -10   
+   Retention
+    Trees >= 100% with DBH > 8
+
+

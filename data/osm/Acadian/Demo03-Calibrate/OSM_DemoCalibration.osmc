@@ -1,0 +1,33 @@
+SIMULATION
+ YEARS 100 	# of years to simulate stand for
+ YPC 5		# of years per simulation cycle
+
+INPUTS.SOURCE "..\AcadianStandData.sqlite"	
+#INPUTS.SOURCE "..\AcadianStandData.accdb"
+
+SIMULATION
+ MODEL
+  CALIBRATOR
+   MinObservations 100	  	#Min samples required for recalibration
+   MinSignificance 0.05 	#Validation test; recalibration tests
+   Mode   MLR			    #Fit mode: MLR = multiple linear regression, MOD = Prediction modifier
+   Models  DBHI,HT,HTI	    #Models to calibrate (Default = DBHI,HT,HTI)
+
+#Starts listening (monitoring) for simulations for HT, DBHI, and HTI observations   
+SIMULATION.MODEL.CALIBRATOR.Start    			  
+
+#Runs all stands through OSM to compare observed ves predicted.   
+SIMULATE 
+
+#Builts the calibration file based on comparisons of observed vs predicted.
+#The routine tries to minimize residual error.
+SIMULATION.MODEL.CALIBRATOR.Build MyOsmCalibrationFile.osmcal True True 
+
+# Once this calibration file 'MyOsmCalibrationFile.osmcal' is built, open this file in Notepad++
+# You should see that many of the hardwood species seem to have underpredicted hieghts
+# This may mean that the height prediction model neds to be adjusted.
+# See help documentation on SIMULATION.MODEL.CALIBRATOR to find out how to interpret these files and
+# how to feed them back into OSM before simualtion to adjust heights with this same file.
+
+# Keep in mind that the data in AcadianStandData does not have actual BGIs or Management Type assigned, so predictions are expected to be poor.
+# Also keep in mind that these are regional models and that some local calibration is probably going to be required for your specific management area. 

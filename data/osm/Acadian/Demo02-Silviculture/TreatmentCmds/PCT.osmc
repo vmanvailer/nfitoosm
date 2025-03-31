@@ -1,0 +1,39 @@
+
+Species
+ Groups
+  Spruce 	WS RS BS NS
+  SpruceFir Spruce BF 
+  Oak		RO BR BO WO				#Red, Bur, Black, White
+  IHW 		QA WA GA BA RM WB OH 	#Aspen, Red Maple, White Birch, Other (non-comm) hardwood
+  
+ Ranks
+  SpeciesCutPriority
+   Spruce	-10
+   WP		 -8
+   BF		 -5
+   EC		 -5 
+   SM		 -5
+   YB		 -5
+   Oak		 -5
+   IHW		 10
+   JP		 20
+   AB		100 #Beech
+
+Actions
+ def PCT
+  
+  Operable 0
+  
+  Stand 0
+   Management PCT
+   
+  Cut 0
+   Priority 
+    SpeciesCutPriority 1 
+    BAL 0.1
+    #DISORDER 10% #Disorders X% of sorted tree list
+    BINS 1500
+
+   Retention
+    Trees >= 1500 
+  

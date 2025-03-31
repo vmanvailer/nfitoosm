@@ -1,0 +1,35 @@
+#Preliminary Tree Grade (Form) Classification Prediction and Transitions
+# Northern Hardwood Research Institute (NHRI)
+# 1 = Poor; 2 = Acceptable; 3 = Good
+# Limited to tolerant hardwood species
+
+#To turn on NHRI Grade Model defined in Acadian Variant, use:
+# SIMULATION.MODEL.GradeModels.IsEnabled true
+# 
+#Or, to load roughly the same user-defined model (below), use:
+# SIMULATION.MODEL.GradeModels.Load NewNHRI "C:\...Grades\NewNHRI.grade" 
+
+Species SM RM YB BE RO  
+	Predictions 1 2 3
+		 5	 14.48	 9.86  75.66
+		10	 14.07	12.45  73.48
+		15	 13.99	14.55  71.47
+		20	 14.23	16.17  69.60
+		25	 14.80	17.31  67.90
+		30	 15.69	17.97  66.34
+		35	 16.91	18.15  64.94
+		40	 18.46	17.84  63.69
+		45	 20.34	17.06  62.60
+		50	 22.54	15.80  61.66
+		55	 25.07	14.05  60.88
+		60	 27.92	11.83  60.25
+		65	 31.10	 9.12  59.78
+		70	 34.61	 5.93  59.46				 
+	Transitions	2 		
+		 0	  0.00 100.00   0.00 
+		 5	  0.50  99.50   0.00	
+	Transitions	3 		
+		 0	  0.00   0.00 100.00
+		 5	  0.25   0.50  99.25
+		
+

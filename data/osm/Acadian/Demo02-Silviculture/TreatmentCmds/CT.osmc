@@ -1,0 +1,39 @@
+Species
+ Groups
+  Spruce 	WS RS BS NS
+  SpruceFir Spruce BF 
+  Oak		RO BR BO WO				#Red, Bur, Black, White
+  IHW 		QA WA GA BA RM WB OH 	#Aspen, Red Maple, White Birch, Other (non-comm) hardwood
+  
+ Ranks
+  SpeciesCutPriority
+   Spruce	-10
+   JP		 -8
+   WP		 -8
+   BF		 -5
+   EC		 -5 
+   SM		 -5
+   YB		 -5
+   Oak		 -5
+   IHW		 10 
+   AB		 20 #Beech
+
+Actions
+ def CT
+  
+  Operable 
+   BA >= 25
+   GMV >= 100
+  
+  Cut 0
+   Priority
+    SpeciesCutPriority 1 
+    HT -1  #Geometric thinning
+    BINS 800 #Target Crop Tree Spacing Post CT
+
+   Trails 22%  
+ 
+   Retention
+    BA >= 50% #50% BA retention (overall, considers trail removals)
+	
+  #Lock 200    

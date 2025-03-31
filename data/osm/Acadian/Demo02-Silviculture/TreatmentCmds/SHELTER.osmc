@@ -1,0 +1,78 @@
+Species
+ Groups
+  Spruce 	WS RS BS NS
+  SpruceFir Spruce BF 
+  Oak		RO BR BO WO		    #Red, Bur, Black, White
+  IHW 		WA GA BA RM WB OH	#Aspen, Red Maple, White Birch, Other (non-comm) hardwood
+  
+ Ranks
+  SpeciesCutPriority
+   #1. Balsam Fir
+   BF 100
+   #2. Beech
+   AB 100
+   #3. Aspen / Red Maple / White Birch
+   IHW 10
+   #4. Hemlock
+   EH   0
+   #5. Intolerant Spruce
+   WS -10
+   BS -10
+   NS -10
+   #Red Spruce & White Pine
+   RS -20
+   WP -20
+   #6. Yellow Birch
+   YB  -25
+   Oak -25
+   #7. Sugar Maple
+   SM -30 
+   #8. Cedar
+   EC -30 
+
+Actions
+ def SHELTER
+  
+  Operable 
+   BA >= 20 with DBH >= 8
+   GMV >= 125 with DBH >= 8
+  
+  Stand
+   Management PartialCut
+  
+  Cut 0 #Preparatory Cut - First Pass: as soon as operable
+
+   Priority
+    SpeciesCutPriority 1
+    DBH -1
+    BINS 1000
+ 
+   Trails 20% 
+   
+   Retention
+    #Minimum residual basal area:
+    BA >= 14 with DBH 8 60     #Open canopy
+    Trees >= 70% with DBH < 8  #Preserve regeneration if exists.
+
+  Cut 1 #Seed Tree - Second Pass: 5 years post initial entry (5 year cycle length assumed here)
+
+   Priority
+    SpeciesCutPriority 1
+    DBH -1
+    BINS 500
+ 
+   Trails 5% #Most trails already established during first pass.
+   
+   Retention
+    #Minimum residual basal area:
+    BA >= 7 with DBH 8 60      #Open canopy a lot
+    Trees >= 70% with DBH < 8   #Preserve regeneration if exists.
+ 
+  Cut 3 #Overstory removal - Final Pass: 15 years post initial entry (5 year cycle length assumed here)
+
+   Trails 5% #Most trails already established during first pass.
+   
+   Retention
+    #Minimum residual basal area:
+    Trees >= 70% with DBH < 8   #Preserve regeneration if exists.
+ 

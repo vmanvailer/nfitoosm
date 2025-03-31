@@ -1,0 +1,45 @@
+
+SIMULATION
+ YEARS 100 	# of years to simulate stand for
+ YPC 5		# of years per simulation cycle
+
+INPUTS.SOURCE "..\AcadianStandData.sqlite"	
+#INPUTS.SOURCE "..\AcadianStandData.accdb"
+
+OUTPUTS
+ StandSummary.ConsoleOn
+ StandSummary.FilePath StandListProjections.csv
+ TreeList.FilePath TreeListProjections.csv  
+
+
+#''' Base simulation of Survey ID 6760
+SIMULATION.Scenario BASE
+SIMULATE 7414
+#'''
+
+#-------------Grade Model Demo---------------#
+#''' <- Delete # at start of line to turn demo off
+
+#Variant Grade Model (DEFAULT: IsEnabled = False)
+SIMULATION.Scenario AcadianGradeModel
+SIMULATION.MODEL.GradeModels.IsEnabled True
+SIMULATE 7414
+
+#User-defined Grade Model
+SIMULATION.Scenario UserGradeModel
+SIMULATION.MODEL.GradeModels.Load NewNHRI GradeModels\NewNHRI.grade
+SIMULATE 7414
+
+#Switch back to Acadian Grade Model
+SIMULATION.MODEL.GradeModels.Current NHRI
+
+#Turn off grade model
+SIMULATION.MODEL.GradeModels.IsEnabled False
+
+#'''
+
+
+
+
+ 
+
