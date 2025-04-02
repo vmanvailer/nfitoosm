@@ -363,8 +363,10 @@ nfi_to_osm <- function(nfi_folder,
     )]
     
     small_tree_table <- map_tree_species(tree_table = small_tree_table)
+    order_col <- intersect(names(tree_table), names(small_tree_table))
     
-    tree_table <- rbindlist(list(large_tree_table, small_tree_table), fill = TRUE)
+    small_tree_table <- small_tree_table[,..order_col]
+    tree_table <- rbindlist(list(tree_table, small_tree_table), fill = TRUE)
   }
   
   # Filter files to include only those filtered in stand list.

@@ -1,6 +1,6 @@
 devtools::install_github("vmanvailer/nfittoosm")
 library(nfitoosm)
-osm_input_data <- nfi_to_osm(nfi_folder,
+osm_input_data <- nfi_to_osm(nfi_folder = "development/nfi_data",
                              scenario_name = "nfi_simulation",
                              remeasurement_number = NULL,
                              calculate_stockable = TRUE,
