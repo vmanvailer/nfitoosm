@@ -21,6 +21,9 @@ learn about about how you can modify some of the data translation
 parameters.
 
 ``` nfi
+
+devtools::install_github("vmanvailer/nfittoosm")
+library(nfittoosm)
 osm_input_data <- nfi_to_osm(nfi_folder,
                              scenario_name = "nfi_simulation",
                              remeasurement_number = NULL,
