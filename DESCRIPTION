@@ -1,5 +1,5 @@
 Package: nfitoosm
-Title: Extracts Canada's national Inventory Data (NFI) data to Open Stand Model (OSM) input format.
+Title: Extracts Canada's National Forestry Inventory (NFI) data to Open Stand Model (OSM) input format.
 Version: 1.0.0.0000
 Authors@R: 
     person("Vinicius", "Manvailer", , "vmgoncal@ualberta.ca", role = c("aut", "cre"),

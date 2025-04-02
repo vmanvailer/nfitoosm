@@ -1,3 +1,4 @@
+devtools::install_github("vmanvailer/nfittoosm")
 library(nfitoosm)
 osm_input_data <- nfi_to_osm(nfi_folder,
                              scenario_name = "nfi_simulation",
