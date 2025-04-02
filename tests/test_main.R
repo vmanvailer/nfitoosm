@@ -1,4 +1,4 @@
-library(data.table)
+library(nfitoosm)
 osm_input_data <- nfi_to_osm(nfi_folder,
                              scenario_name = "nfi_simulation",
                              remeasurement_number = NULL,

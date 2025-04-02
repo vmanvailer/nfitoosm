@@ -78,6 +78,7 @@
 #' @import RSQLite
 #' @importFrom tidyr separate
 #' @import sf
+#' @export
 nfi_to_osm <- function(nfi_folder,
                        scenario_name = "nfi_simulation",
                        remeasurement_number = NULL,
