@@ -1,3 +1,4 @@
 ^development$
 ^nfitoosm\.Rproj$
 ^\.Rproj\.user$
+*.sqlite
