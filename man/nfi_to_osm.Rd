@@ -42,7 +42,7 @@ Also, if using \code{meas_num = 0} there is a higher chance fully productive plo
 
 \item{model_variant}{Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.}
 
-\item{include_small_trees}{Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link\link{https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf}(Ground Plot Guidelines).}
+\item{include_small_trees}{Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.}
 
 \item{dbh_filter}{Numeric. A field to filter out trees based on DBH. Will pick DBH higher than or equal to this value.}
 
@@ -69,7 +69,7 @@ Multiple assumptions are made on the creation of each variable and they are desc
 \item{Scenario}{User specified}
 \item{SurveyID}{Same as \code{nfi_plot} in NFI data.}
 \item{SurveyYear}{The year from \code{meas_date} in \emph{all_gp_site_info.csv} NFI data.}
-\item{SurveyAge}{The stand age from \code{site_age} in \emph{all_gp_ltp_header.csv} NFI data. Uses arithmetic average age of trees deemed suitable for compiling site age. For more details see page 129 of \link\link{https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf}(Ground Plot Guidelines).}
+\item{SurveyAge}{The stand age from \code{site_age} in \emph{all_gp_ltp_header.csv} NFI data. Uses arithmetic average age of trees deemed suitable for compiling site age. For more details see page 129 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.}
 \item{Plots}{Number of plots for a given stand. Defaults to 1 where each NFI plot will assumed to represent a stand.}
 \item{Stockable}{Ratio of total sample area (all plots) that supports productive tree growth. Calculated as described in \code{calculate_stockable}}
 \item{X}{NFI plots uses UTM coordinates systems which are converted to Latitude/Longitude system using package \pkg{sf}}

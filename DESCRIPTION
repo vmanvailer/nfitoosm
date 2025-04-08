@@ -1,14 +1,19 @@
 Package: nfitoosm
-Title: Extracts Canada's National Forestry Inventory (NFI) data to Open Stand Model (OSM) input format.
+Title: NFI to OSM
 Version: 1.0.0.0000
 Authors@R: 
     person("Vinicius", "Manvailer", , "vmgoncal@ualberta.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-6529-4474"))
-Description: What the package does (one paragraph).
+Description: Extracts Canada's National Forestry Inventory (NFI) data to Open Stand Model (OSM) input format.
 License: Unlicensed
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Imports: 
+	data.table,
+	RSQLite,
+	tidyr,
+	sf
 Depends: 
     R (>= 4.0)
 LazyData: true

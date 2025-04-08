@@ -24,7 +24,7 @@
 #' Also, if using `meas_num = 0` there is a higher chance fully productive plots being incompletely measured (due to cost issues). See page 12 of \link[https://nfi.nfis.org/resources/groundplot/GP_compilation_procedures_2.4.pdf]{Compilation Procedures}
 #' @param provinces Vector of strings. Provinces for which you want data for. Will only retrieve data for one of the four provinces in the argument default.
 #' @param model_variant Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.
-#' @param include_small_trees Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf](Ground Plot Guidelines).
+#' @param include_small_trees Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.
 #' @param dbh_filter Numeric. A field to filter out trees based on DBH. Will pick DBH higher than or equal to this value.
 #' @param use_projected_height Logical. When both (measured, calculated or estimated) height and projected height are available. Prefer projected height. Projected height are calculated for broken stems (i.e. stem_cond == "B").
 #' @param calculate_ef_for_dbh_bin Logical. Refer to the required OSM column "Stems" and defaults to `TRUE`.
@@ -44,7 +44,7 @@
 #'            \item{Scenario}{User specified}
 #'            \item{SurveyID}{Same as `nfi_plot` in NFI data.}
 #'            \item{SurveyYear}{The year from `meas_date` in \emph{all_gp_site_info.csv} NFI data.}
-#'            \item{SurveyAge}{The stand age from `site_age` in \emph{all_gp_ltp_header.csv} NFI data. Uses arithmetic average age of trees deemed suitable for compiling site age. For more details see page 129 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf](Ground Plot Guidelines).}
+#'            \item{SurveyAge}{The stand age from `site_age` in \emph{all_gp_ltp_header.csv} NFI data. Uses arithmetic average age of trees deemed suitable for compiling site age. For more details see page 129 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.}
 #'            \item{Plots}{Number of plots for a given stand. Defaults to 1 where each NFI plot will assumed to represent a stand.}
 #'            \item{Stockable}{Ratio of total sample area (all plots) that supports productive tree growth. Calculated as described in `calculate_stockable`}
 #'            \item{X}{NFI plots uses UTM coordinates systems which are converted to Latitude/Longitude system using package \pkg{sf}}

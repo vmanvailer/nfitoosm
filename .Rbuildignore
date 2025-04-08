@@ -1,4 +1,5 @@
 ^development$
 ^nfitoosm\.Rproj$
 ^\.Rproj\.user$
-*.sqlite
+\\.sqlite$
+^tests$
