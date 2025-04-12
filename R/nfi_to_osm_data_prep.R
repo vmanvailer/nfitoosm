@@ -488,7 +488,7 @@ nfi_to_osm <- function(nfi_folder,
   osm_input_data <- list(OSM_StandList = stand_table,
                          OSM_TreeList = tree_table)
   
-  db_output_path <- file.path(output_path, "nfi_to_osm_input_data.sqlite")
+  db_output_path <- file.path(output_path, paste0("nfitoosm_", scenario_name, ".sqlite"))
   
   # Write out SQLite
   con <- RSQLite::dbConnect(RSQLite::SQLite(), dbname = db_output_path)
