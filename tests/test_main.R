@@ -4,13 +4,10 @@ osm_input_data <- nfi_to_osm(nfi_folder = "development/nfi_data",
                              scenario_name = "nfi_simulation",
                              remeasurement_number = NULL,
                              calculate_stockable = TRUE,
-                             provinces = c("New Brunswick", "Prince Edward Island", "Nova Scotia", "Newfoundland and Labrador"),
-                             model_variant = "Acadian",
+                             provinces = c("Newfoundland and Labrador"),
+                             model_variant = "Newfoundland and Labrador",
                              include_small_trees = TRUE,
-                             dbh_filter = 0,
-                             use_projected_height = TRUE,
-                             calculate_ef_for_dbh_bin = TRUE,
-                             ef_dbh_increment_bin = 4,
+                             dbh_filter = 1,
                              output_path = tempdir()
 )
 

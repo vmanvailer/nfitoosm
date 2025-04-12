@@ -26,15 +26,6 @@
 #' @param model_variant Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.
 #' @param include_small_trees Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.
 #' @param dbh_filter Numeric. A field to filter out trees based on DBH. Will pick DBH higher than or equal to this value.
-#' @param use_projected_height Logical. When both (measured, calculated or estimated) height and projected height are available. Prefer projected height. Projected height are calculated for broken stems (i.e. stem_cond == "B").
-#' @param calculate_ef_for_dbh_bin Logical. Refer to the required OSM column "Stems" and defaults to `TRUE`.
-#' Calculates expansion factors for DBH bins specified in `ef_dbh_increment_bin`, instead of for each individual tree. The calculation will first group trees into DBH class sizes (e.g. (0-4],(4-8],(8-12], and etc.).
-#' It then aggregates data by counting number of trees and averaging DBH and height for each bin. 
-#' Finally the 'Stems' variable is calculate as the count of stem/measured_plot_size (generally 0.04 but sometimes less).
-#' 
-#' Aggregated Stems, DBH and Height will represent individual trees to be used as input in OSM.
-#' If `FALSE` it will assume each individual tree has an expansion factor of 1/measured_plot_size. This may be less prefered as it gives equal weights to all individual trees in the plot.
-#' @param ef_dbh_increment_bin Numeric. In centimeters. Only used if `calculate_ef_for_dbh_bin = TRUE`. 
 #' @param output_path String. Use to output the SQLite database that can be passed to OSM. 
 #' @return Returns a list with two data frames (data.tables) and a writes a database on specified output_path. The data frames should match the input data exactly as in \link[https://forusresearch.com/downloads/osm/help/OSM.HelpFiles/OSM.Input.htm]{Open Stand Model}.
 #' Multiple assumptions are made on the creation of each variable and they are described below.
@@ -86,16 +77,17 @@ nfi_to_osm <- function(nfi_folder,
                        provinces = c("New Brunswick", "Prince Edward Island", "Nova Scotia", "Newfoundland and Labrador"),
                        model_variant = c("Acadian", "Newfoundland and Labrador"),
                        include_small_trees = TRUE,
-                       dbh_filter = 0,
-                       use_projected_height = TRUE,
-                       calculate_ef_for_dbh_bin = TRUE,
-                       ef_dbh_increment_bin = 4,
+                       dbh_filter = 1,
                        output_path = getwd()
 ) {
   
+  if(!dir.exists(output_path)){
+    stop("Specified directory below does not exist\n\n\t", output_path)
+  }
+  # nfi_folder <- file.path(getwd(), "development", "nfi_data")
   file_list <- list.files(nfi_folder,  "all_gp_.*\\.csv", recursive = TRUE, full.names = TRUE)
   
-  # --- Plot Table ------------------------------------------------------------
+  # --- Stand Table ------------------------------------------------------------
   # Read site_info
   site_info_path <- grep(x = file_list, pattern =  file.path(nfi_folder, "all_gp_site_info.csv"), value = TRUE)
   site_info <- fread(site_info_path)
@@ -110,7 +102,6 @@ nfi_to_osm <- function(nfi_folder,
     loc_id = loc_id, # filtering column
     meas_num = meas_num,# Filtering column
     meas_date = meas_date, # intermediate variable to calculate YEAR (SurveyYear)
-    # elev = elevation,
     utm_n = utm_n, # intermediate variable to calculate LAT
     utm_e = utm_e, # intermediate variable to calculate LONG
     utm_zone = utm_zone, # intermediate variable to calculate LAT/LONG
@@ -119,12 +110,11 @@ nfi_to_osm <- function(nfi_folder,
   
   # Filter to a given field campaign
   if(is.null(remeasurement_number)){
-    message("No remeasurement_number defined. Defaulting to first remeasurement campaign (meas_num = 1) which has measured most plots and most variables.\n")
-    stand_table <- stand_table[meas_num == 1]
+    message("No remeasurement number chosen. Will include all remeasurements. \n\nSurveyID will use the name pattern ID {nfi_plot} L {loc_id} M {meas_num}\n nfi_plot = NFI plot id\n loc_id = Location ID (used when plot change locations)\n meas_num = Remeasurement number\n\n")
   } else {
     stand_table <- stand_table[meas_num == remeasurement_number]
     if(nrow(stand_table) == 0){
-      stop(paste0("There is no data for remeasurement number ", remeasurement_number))
+      stop(paste0("There is no data for remeasurement number ", remeasurement_number, "\n\n"))
     }
   }
   
@@ -133,7 +123,6 @@ nfi_to_osm <- function(nfi_folder,
   
   ## Survey Year --------------------------------------------------------------
   # Create year variable and remove intermediate variables used to calculate LAT and LONG
-  # stand_table[, meas_yr := year(as.Date(meas_date, "%Y-%b-$d"))]
   stand_table[, SurveyYear := tidyr::separate(.SD, col = meas_date, into = "meas_yr", sep = "-", extra = "drop"), .SDcols = "meas_date"]
   stand_table[, SurveyYear := as.integer(SurveyYear)]
   
@@ -147,7 +136,7 @@ nfi_to_osm <- function(nfi_folder,
     site_age,                              # Age field
     meas_plot_size, 
     nom_plot_size # size field (For "Stockable" variable)
-    )], by = c("nfi_plot", "loc_id", "meas_date", "meas_num"))
+    )], by = c("nfi_plot", "loc_id", "meas_date", "meas_num"), all.x = TRUE)
   
   data.table::setnames(stand_table, old = "site_age", new = "SurveyAge")
   
@@ -160,11 +149,12 @@ nfi_to_osm <- function(nfi_folder,
     message("Calculating 'Stockable' as measured plot size / nominal plot size (where both data exists).\n\n")
     } else {
     message("Setting 'Stockable' to 1.\n\n")
-  }
-  stand_table[, Stockable := fifelse(calculate_stockable & nom_plot_size > 0, 
-                                    meas_plot_size/nom_plot_size,
-                                    1)
-             ]
+    }
+  
+  stand_table[, Stockable := fifelse(calculate_stockable & !is.na(meas_plot_size) & !is.na(nom_plot_size) & nom_plot_size > 0, 
+                                     meas_plot_size/nom_plot_size,
+                                     1)
+  ]
   
   ## Convert UTM to Lat Long --------------------------------------------------
   # First, create a function to convert UTM to lat/lon
@@ -201,16 +191,19 @@ nfi_to_osm <- function(nfi_folder,
     c("New Brunswick", "Prince Edward Island", "Nova Scotia", "Newfoundland and Labrador"),
     c("NB", "PE", "NS", "NL")
   )
+  wrong_pt <- setdiff(provinces, pt)
+  if(length(wrong_pt) > 0){
+    stop(paste0("The following provinces are not part allowed or are mispelled:\n\t", paste(wrong_pt, collapse = "\n\t")))
+  }
   
+  pt_filter <- pt[pt %in% provinces] |> names()
+  stand_table <- stand_table[province %in% pt_filter,]
   
   if(model_variant == "Acadian"){
-    not_allowed_pt <- pt[!provinces %in% c("New Brunswick", "Prince Edward Island", "Nova Scotia")]
+    not_allowed_pt <- setdiff(provinces, c("New Brunswick", "Prince Edward Island", "Nova Scotia"))
     if(length(not_allowed_pt) > 0){
-      message(paste0("Warning | '",not_allowed_pt, "' is not calibrated for the Acadian model.\n"))
+      message(paste0("Warning | '", not_allowed_pt, "' is not calibrated for the Acadian model.\n"))
     }
-    
-    pt_filter <- pt[pt %in% provinces] |> names()
-    stand_table <- stand_table[province %in% pt_filter,]
     
     if(nrow(stand_table) == 0){
       stop(paste0("There is no data for remeasurement number ", remeasurement_number, "for any of:\n", paste0(paste0("\t", provinces), collapse = "\n")))
@@ -219,8 +212,7 @@ nfi_to_osm <- function(nfi_folder,
     # Zone    
     stand_table[, Zone := province]
     
-    # PLACEHOLDER to add Management (possible to add BGI with a lot o work..)
-    column_order <- c("Scenario", "nfi_plot", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Zone", "Management")
+    column_order <- c("Scenario", "nfi_plot", "loc_id", "meas_num", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Zone", "Management", "BGI")
     
   } else if(model_variant == "Newfoundland and Labrador"){
     
@@ -228,9 +220,8 @@ nfi_to_osm <- function(nfi_folder,
       message("Warning | You removed the Newfoundland and Labrador from the 'provinces' argument but specified model_variant = 'Newfoundland and Labrador'.\nPerhaps you meant to use 'model_variannt = Acadian'?\n\nModel will default the 'District' column to 4 'NL'.\n")
       # District will default to 4 as per:
       # https://forusresearch.com/downloads/osm/help/OSM.Variants/OSM.Variants.NL/OSM.Variants.NL.HelpFiles/OSM.Variants.NL.InputTables.htm
-      column_order <- c("Scenario", "nfi_plot", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Management")
-      
     }
+    column_order <- c("Scenario", "nfi_plot", "loc_id", "meas_num", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Management")
     
   } else {
     
@@ -238,30 +229,35 @@ nfi_to_osm <- function(nfi_folder,
     
   }
   
-  # Management (Extra column)
+  # --- Management (Extra column) ---------------------------------------------
   treatment_path <- grep(x = file_list, pattern =  "all_gp_treatment.csv", value = TRUE)
   treatment <- fread(treatment_path, select = c("nfi_plot", "loc_id", "meas_date", "meas_num", "treat_type", "treat_yr"))
   
-  stand_table <- merge(stand_table, treatment)
+  stand_table <- merge(stand_table, treatment, all.x = TRUE)
   stand_table[, meas_yr := as.integer(substr(meas_date, 1, 4))]
-  stand_table[, treat_last25_yt := meas_yr-treat_yr <= 25]
+  stand_table[, treat_last25_yt := fifelse(!is.na(meas_yr) &  meas_yr > 0 & !is.na(treat_yr) & treat_yr > 0, meas_yr-treat_yr <= 25, FALSE)]
   stand_table[, Management :=  fifelse(treat_type == "PC" & treat_last25_yt, "PartialCut",
                                       fifelse(treat_type == "CC" & treat_last25_yt, "Clearcut",
                                               fifelse(treat_type == "PT" & treat_last25_yt, "PCT", "None")))]
   
+  
+  # --- BGI -------------------------------------------------------------------
+  if (model_variant == "Acadian"){
+  stand_table <- merge(stand_table, bgi_values, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "province"), all.x = TRUE)
+  }
   stand_table <- stand_table[,..column_order]
   
-  data.table::setnames(stand_table, old = "nfi_plot", new = "SurveyID")
-  
-  
-  # --- Tree Table -------------------------------------------------------------
+  # --- Tree Table ------------------------------------------------------------
   
   # Prepare species list found on the Acadian model to be merged with nfi data. We want the proper species code to use on OSM.
-  setDT(acadian_species_list)
-  acadian_species_list[, .(GENUS, SPECIES)]
-  acadian_species_list[, `:=` (NFI_GENUS = toupper(substr(GENUS, 1, 4)),
-                               NFI_SPECIES = toupper(substr(SPECIES, 1, 3))
+  acadian_splist_dt <- copy(acadian_species_list)
+  setDT(acadian_splist_dt)
+  acadian_gnsp_only <- acadian_splist_dt[, .(GENUS, SPECIES, OSM_AD_CmdKey)]
+  acadian_gnsp_only[, `:=` (NFI_GENUS = toupper(substr(GENUS, 1, 4)),
+                            NFI_SPECIES = toupper(substr(SPECIES, 1, 3))
   )]
+  acadian_gnsp_only[, NFI_SPECIES := fifelse(SPECIES == "saccharum", "SAH", NFI_SPECIES)]
+  
   
   ## --- Large Tree Table ------------------------------------------------------
   # Read ltp_tree 
@@ -269,13 +265,15 @@ nfi_to_osm <- function(nfi_folder,
   ltp_tree <- fread(ltp_tree_path)
   
   # Merge the two tables
-  large_tree_table <- merge(ltp_tree, ltp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"))
+  large_tree_table <- merge(ltp_tree, ltp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"), all.x = TRUE)
   
-  if(is.null(remeasurement_number)){
-    large_tree_table <- large_tree_table[meas_num == 1]
-  } else {
+  if(!is.null(remeasurement_number)){
     large_tree_table <- large_tree_table[meas_num == remeasurement_number]
   }
+  
+  # Filter only the nfi plots to be used.
+  large_tree_table <- large_tree_table[nfi_plot %in% unique(stand_table$nfi_plot)]
+  
   
   # Location change (loc_id) may not impact model setup.
   # large_tree_table[loc_id == 0,]
@@ -287,11 +285,14 @@ nfi_to_osm <- function(nfi_folder,
     meas_num = meas_num,
     meas_date = meas_date,
     meas_plot_size = meas_plot_size,
+    nom_plot_size = nom_plot_size,
     tree_num = tree_num,
     tree_genus = lgtree_genus,
     tree_species = lgtree_species, 
     DBH = dbh,
-    HT = fifelse(use_projected_height & !is.na(height_prj) & height_prj > 0, height_prj, height),
+    stem_cond = stem_cond,
+    HT = fifelse(stem_cond != "B" & height > 0, height, fifelse(stem_cond != "B" & height < 0 & !is.na(height_prj), height_prj, NA)),
+    HTK = fifelse(stem_cond == "B" & !is.na(height_prj) & height_prj > 0, height_prj, NA),
     crown_cond = crown_cond,
     crown_base = crown_base,
     crown_top = crown_top,
@@ -299,30 +300,42 @@ nfi_to_osm <- function(nfi_folder,
     tree_size = "Large"
   )]
   
-  map_tree_species <- function(tree_table){
-    species_columns <- c("tree_genus", "tree_species")
+  map_tree_species <- function(tree_table) {
+  species_columns <- c("tree_genus", "tree_species")
+  
+  # Step 1: Add Softwood/Hardwood GROUP info
+  tree_table <- merge(tree_table,
+                      unique(nfi_species[, .(GROUP, CODE_GENU, CODE_SPEC)]),
+                      by.x = species_columns,
+                      by.y = c("CODE_GENU", "CODE_SPEC"),
+                      all.x = TRUE)
+  
+  # Step 2: Full genus + species match to OSM species list
+  tree_table <- merge(tree_table,
+                      acadian_gnsp_only[NFI_SPECIES != "SPP", .(NFI_GENUS, NFI_SPECIES, OSM_AD_CmdKey)],
+                      by.x = species_columns,
+                      by.y = c("NFI_GENUS", "NFI_SPECIES"),
+                      all.x = TRUE)
+  
+  # Step 3: Fallback match on genus only where species match failed
+  unmatched <- is.na(tree_table$OSM_AD_CmdKey)
+  
+  if (any(unmatched)) {
+    genus_only_lookup <- acadian_gnsp_only[NFI_SPECIES == "SPP", .(NFI_GENUS, OSM_AD_CmdKey)]
     
-    # Add Softwood/Hardwood classification for species
-    tree_table <- merge(tree_table, 
-                        unique(nfi_species[,.(GROUP, CODE_GENU, CODE_SPEC)]),
-                        by.x = species_columns,
-                        by.y = c("CODE_GENU", "CODE_SPEC"),
-    )
-    
-    # Based on the Acadian Demo files I'll use the OSM_AD_CmdKey column.
-    tree_table <- merge(tree_table,
-                        acadian_species_list[,.(NFI_GENUS, NFI_SPECIES, OSM_AD_CmdKey)],
-                        by.x = species_columns,
-                        by.y = c("NFI_GENUS", "NFI_SPECIES"),
-                        all.x = TRUE,
-                        allow.cartesian = TRUE)
-    
-    # If NFI species don't match OSM Acadian Species List, check NFI species list for Softwood (OS)/Hardwood (OH) and use those codes.
-    # If OS/OH not found, assign "XX" to represent an unknown species on OSM. 
-    tree_table[, OSM_AD_CmdKey := fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Softwood", "OS",  
-                                          fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Hardwood", "OH", "XX"))]
-    return(tree_table)
+    tree_table[unmatched, 
+      OSM_AD_CmdKey := genus_only_lookup[.SD, 
+                                            on = .(NFI_GENUS = tree_genus),
+                                            x.OSM_AD_CmdKey]]
   }
+
+  # Step 4: Final fallback if no genus match either → OS (Softwood), OH (Hardwood), or XX
+  tree_table[, OSM_AD_CmdKey := fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Softwood", "OS",
+                                 fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Hardwood", "OH",
+                                 fifelse(is.na(OSM_AD_CmdKey), "XX", OSM_AD_CmdKey)))]
+
+  return(tree_table)
+}
   
   tree_table <- map_tree_species(tree_table = large_tree_table)
   
@@ -338,13 +351,16 @@ nfi_to_osm <- function(nfi_folder,
     stp_tree <- fread(stp_tree_path)
     
     # Merge the two tables
-    small_tree_table <- merge(stp_tree, stp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"))
+    small_tree_table <- merge(stp_tree, stp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"), all.x = TRUE)
     
-    if(is.null(remeasurement_number)){
-      small_tree_table <- small_tree_table[meas_num == 1]
-    } else {
+    # Filter for selected measurement number
+    if(!is.null(remeasurement_number)){
       small_tree_table <- small_tree_table[meas_num == remeasurement_number]
     }
+    
+    # Filter only the nfi plots to be used.
+    small_tree_table <- small_tree_table[nfi_plot %in% unique(stand_table$nfi_plot)]
+    
     
     # Select and rename columns for small tree table
     small_tree_table <- small_tree_table[, .(
@@ -353,11 +369,13 @@ nfi_to_osm <- function(nfi_folder,
       meas_num = meas_num,
       meas_date = meas_date,
       meas_plot_size = meas_plot_size,
+      nom_plot_size = nom_plot_size,
       tree_num = smtree_num,
       tree_genus = smtree_genus,
       tree_species = smtree_species,
       DBH = smtree_dbh,
-      HT = fifelse(use_projected_height & !is.na(smtree_ht_prj) & smtree_ht_prj > 0, smtree_ht_prj, smtree_ht),
+      HT = fifelse(stem_cond != "B" & smtree_ht > 0, smtree_ht, fifelse(stem_cond != "B" & smtree_ht < 0 & !is.na(smtree_ht_prj), smtree_ht_prj, NA)),
+      HTK = fifelse(stem_cond == "B" & !is.na(smtree_ht_prj) & smtree_ht_prj > 0, smtree_ht_prj, NA),
       tree_status = fifelse(smtree_status == "DS", "Dead", "Live"),
       tree_size = "Small"
     )]
@@ -369,37 +387,15 @@ nfi_to_osm <- function(nfi_folder,
     tree_table <- rbindlist(list(tree_table, small_tree_table), fill = TRUE)
   }
   
-  # Filter files to include only those filtered in stand list.
-  tree_table <- tree_table[nfi_plot %in% unique(stand_table$SurveyID),]
   
   ## --- Expansion Factor (Stems) ----------------------------------------------
-  if(dbh_filter > 0) messaging("Including only trees with DBH >=", dbh_filter, "\n\n")
+  if(dbh_filter > 0) message("Including only trees with DBH >= ", dbh_filter, "\n\n")
   tree_table <- tree_table[DBH >= dbh_filter]
   
-  if(calculate_ef_for_dbh_bin){
-    message("Calculating expansion factor (OSM variable 'Stems') using DBH bins of size : ", ef_dbh_increment_bin, "\n",
-            "Will average 'DBH', 'Height', and 'Crown' variables for each DBH bin to produce Tree List Table.\n\n")
-    tree_table[,DBHBin := cut(DBH, seq(0, max(DBH), by = ef_dbh_increment_bin))]
-    tree_table_unaggregated <- copy(tree_table)
-    tree_table <- tree_table[, .(n_stems = .N,
-                                 meas_plot_size = mean(meas_plot_size),
-                                 DBH = mean(DBH, na.rm = T),
-                                 HT = mean(ifelse(HT < 0, NA, HT), na.rm = TRUE),
-                                 crown_cond = mean(ifelse(crown_cond < 0, NA, crown_cond), na.rm = TRUE),
-                                 crown_base = mean(ifelse(crown_base < 0, NA, crown_base), na.rm = TRUE),
-                                 crown_top = mean(ifelse(crown_top < 0, NA, crown_top), na.rm = TRUE)
-                                 ),
-                             by = .(nfi_plot, loc_id, meas_date, meas_num, tree_genus, tree_species, OSM_AD_CmdKey, tree_status, DBHBin)]
-    tree_table[ ,Stems := (n_stems/meas_plot_size)]
-    
-    tree_table_unaggregated[,Stems := (1/meas_plot_size)]
-    
-  } else {
-    
-    message("Calculating expansion factor as 1/measured plot size\n\n")
-    tree_table[,Stems := (1/meas_plot_size)]
-    
-  }
+  message("Calculating expansion factor as 1/measured plot size\n\n")
+  tree_table[,Stems := fifelse(!is.na(nom_plot_size) & nom_plot_size > 0, (1/nom_plot_size), 1/0.04)]
+  
+  # }
   
   ## ToCut = NaN --------------
   ## Weight = NaN -------------
@@ -413,11 +409,6 @@ nfi_to_osm <- function(nfi_folder,
   tree_table[,CR := fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & is.na(crown_top), (crown_top-crown_base)/HT,
                             fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & !is.na(HT), (HT-crown_base)/HT,
                                     NA))]
-  if(calculate_ef_for_dbh_bin){
-    tree_table_unaggregated[,CR := fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & is.na(crown_top), (crown_top-crown_base)/HT,
-                                           fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & !is.na(HT), (HT-crown_base)/HT,
-                                                   NA))]
-  }
   ## DBHI = NaN --------
   # = possible but skip
   ## HTI = NaN ---------
@@ -428,32 +419,10 @@ nfi_to_osm <- function(nfi_folder,
   
   ## --- Born -------------------------------------------------------------------
   age_path <- grep(x = file_list, pattern = "tree_age.csv", value = TRUE)
-  message("Getting 'Born' variable from tree age table.")
+  message("Getting 'Born' variable from tree age table.\n\n")
   age_table <- fread(age_path, select = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num", "age_total"))
-  
-  if(calculate_ef_for_dbh_bin){
-    message("'calculate_ef_for_dbh_bin = TRUE'. Averaging tree age based on expansion factor DBH bin\n\n")
-    age_table_aggregated <- merge(age_table, ltp_tree[,.(nfi_plot, loc_id, meas_date, meas_num, tree_num,
-                                  tree_genus = lgtree_genus, 
-                                  tree_species = lgtree_species,
-                                  tree_status = fifelse(lgtree_status == "DS", "Dead", "Live"),
-                                  DBH = dbh)])
-    age_table_aggregated[, DBHBin := cut(DBH, seq(0, max(DBH), by = ef_dbh_increment_bin))]
-    age_table_aggregated <- age_table_aggregated[, .(age_total = mean(age_total)),
-                                                 by = .(nfi_plot, loc_id, meas_date, meas_num, tree_genus, tree_species, tree_status, DBHBin)] # Same as when calculating expansion factor.
-    tree_table <- merge(tree_table, age_table_aggregated, all.x = TRUE)
-    
-    tree_table_column_order <- c("SurveyID", "Species", "DBH", "HT", "Stems", "CR", "Born", "Died")
-    
-    tree_table_unaggregated <- merge(tree_table_unaggregated, age_table, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num"), all.x = TRUE)
-    data.table::setnames(tree_table_unaggregated, old = "tree_num", new = "TreeID")
-    tree_table_unaggregated_column_order <- c("SurveyID", "TreeID", "Species", "DBH", "HT", "Stems", "CR", "Born", "Died")
-    
-  } else{
-    tree_table <- merge(tree_table, age_table, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num"), all.x = TRUE)
-    data.table::setnames(tree_table, old = "tree_num", new = "TreeID")
-    tree_table_column_order <- c("SurveyID", "TreeID", "Species", "DBH", "HT", "Stems", "CR", "Born", "Died")
-  }
+  tree_table <- merge(tree_table, age_table, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num"), all.x = TRUE)
+  data.table::setnames(tree_table, old = "tree_num", new = "TreeID")
   
   
   ## --- Died ------------------------------------------------------------------
@@ -463,24 +432,46 @@ nfi_to_osm <- function(nfi_folder,
   # Assumes all which are not dead to be live standing.
   message("Identifying dead trees. They will be assumed to have died 7 years ago as per OSM defaults.\n\n")
   tree_table[,Died := fifelse(tree_status == "DS", 9999, 0)]
-  tree_table_unaggregated[,Died := fifelse(tree_status == "DS", 9999, 0)]
-  ## Risk = 0 ------------------------------------------------------------------
+
+    ## Risk = 0 ------------------------------------------------------------------
   ## Grade = 0 -----------------------------------------------------------------
   ## Wrap-up -------------------------------------------------------------------
-  data.table::setnames(tree_table, old = c("nfi_plot", "OSM_AD_CmdKey", "age_total"), new = c("SurveyID", "Species", "Born"))
+  
+  # Create ids like in standplot
+  if(is.null(remeasurement_number)){
+    stand_table[ ,SurveyID := paste0("ID", nfi_plot, "L", loc_id, "M", meas_num)]
+    stand_table[, `:=` (
+      nfi_plot = NULL,
+      loc_id = NULL,
+      meas_num = NULL
+      )]
 
+    tree_table[ ,SurveyID := paste0("ID", nfi_plot, "L", loc_id, "M", meas_num)]
+    tree_table[, nfi_plot := NULL]
+    data.table::setnames(tree_table, old = c("OSM_AD_CmdKey", "age_total"), new = c("Species", "Born"))
+    
+  } else {
+    data.table::setnames(stand_table, old = c("nfi_plot") , new = c("SurveyID"))
+    data.table::setnames(tree_table, old = c("nfi_plot", "OSM_AD_CmdKey", "age_total"), new = c("SurveyID", "Species", "Born"))
+  }
+
+  # Select only final columns
+  if(model_variant == "Acadian"){
+    stand_table_column_order <- c("Scenario", "SurveyID", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Zone", "Management", "BGI")
+  } else {
+    stand_table_column_order <- c("Scenario", "SurveyID", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Management")
+  }
+  stand_table <- stand_table[,..stand_table_column_order]
+  tree_table_column_order <- c("SurveyID", "TreeID", "Species", "DBH", "HT", "Stems", "CR", "Born", "Died")
   tree_table <- tree_table[,..tree_table_column_order]
   
-  if(calculate_ef_for_dbh_bin){
-    data.table::setnames(tree_table_unaggregated, old = c("nfi_plot", "OSM_AD_CmdKey", "age_total"), new = c("SurveyID", "Species", "Born"))
-    tree_table_unaggregated <- tree_table_unaggregated[,..tree_table_unaggregated_column_order]
-  }
-  
+  # Checking for errors or missed merges.
   in_tree_not_in_stand <- setdiff(unique(tree_table$SurveyID), unique(stand_table$SurveyID))
   in_stand_not_in_tree <- setdiff(unique(stand_table$SurveyID), unique(tree_table$SurveyID))
   
   unmatched_list <- paste(paste0("\t", in_stand_not_in_tree),  collapse = "\n")
   
+  # Warnings and errors
   if(length(in_stand_not_in_tree)>0 & !include_small_trees){
     message(paste0("Warning | The NFI plots below have only small trees. Those will be removed since you have set 'include_small_trees = FALSE'\n", unmatched_list, "\n\n"))
   } else if (length(in_stand_not_in_tree)>0 & include_small_trees){
@@ -493,19 +484,12 @@ nfi_to_osm <- function(nfi_folder,
     stop("Something is wrong with the code. There are tree data that does not match any stand data records. Contact developer.\n")
   }
   
+  # Final data
   osm_input_data <- list(OSM_StandList = stand_table,
-                         OSM_TreeList = tree_table,
-                         OSM_TreeList_unaggregated = if (calculate_ef_for_dbh_bin) tree_table_unaggregated else NULL
-                         )
-  if(is.null(osm_input_data$tree_table_unaggregated)){
-    osm_input_data <- osm_input_data[1:2]
-  }
-  
-  if(!dir.exists(output_path)){
-    stop("Specified directory below does not exist\n\n\t", output_path)
-  }
+                         OSM_TreeList = tree_table)
   
   db_output_path <- file.path(output_path, "nfi_to_osm_input_data.sqlite")
+  
   # Write out SQLite
   con <- RSQLite::dbConnect(RSQLite::SQLite(), dbname = db_output_path)
   lapply(names(osm_input_data[1:2]), function(tbl_name){
