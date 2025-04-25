@@ -361,6 +361,21 @@ nfi_to_osm <- function(nfi_folder,
     # Filter only the nfi plots to be used.
     small_tree_table <- small_tree_table[nfi_plot %in% unique(stand_table$nfi_plot)]
     
+    # Find max tree_num per plot and meas_num in large trees
+    max_large_ids <- tree_table[, .(max_large_id = max(tree_num, na.rm = TRUE)),
+                                by = .(nfi_plot, meas_num)]
+    
+    # Join with small tree table
+    small_tree_table <- merge(small_tree_table, max_large_ids, by = c("nfi_plot", "meas_num"), all.x = TRUE)
+    
+    # Replace NAs (if no large trees in plot/meas_num) with 0
+    small_tree_table[is.na(max_large_id), max_large_id := 0]
+    
+    # Renumber small tree IDs to continue from large tree IDs
+    small_tree_table[, tree_num := max_large_id + .I, by = .(nfi_plot, meas_num)]
+    
+    # Drop helper column
+    small_tree_table[, max_large_id := NULL]
     
     # Select and rename columns for small tree table
     small_tree_table <- small_tree_table[, .(
@@ -370,7 +385,7 @@ nfi_to_osm <- function(nfi_folder,
       meas_date = meas_date,
       meas_plot_size = meas_plot_size,
       nom_plot_size = nom_plot_size,
-      tree_num = smtree_num,
+      tree_num = tree_num,
       tree_genus = smtree_genus,
       tree_species = smtree_species,
       DBH = smtree_dbh,
@@ -431,9 +446,9 @@ nfi_to_osm <- function(nfi_folder,
   # DS = Dead fallen, LF = Live Fallen, LS = Live Stading, M = Missing.
   # Assumes all which are not dead to be live standing.
   message("Identifying dead trees. They will be assumed to have died 7 years ago as per OSM defaults.\n\n")
-  tree_table[,Died := fifelse(tree_status == "DS", 9999, 0)]
+  tree_table[,Died := fifelse(tree_status == "Dead", 9999, 0)]
 
-    ## Risk = 0 ------------------------------------------------------------------
+  ## Risk = 0 ------------------------------------------------------------------
   ## Grade = 0 -----------------------------------------------------------------
   ## Wrap-up -------------------------------------------------------------------
   
