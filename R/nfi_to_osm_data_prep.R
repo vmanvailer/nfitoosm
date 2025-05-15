@@ -22,6 +22,10 @@
 #' 
 #' If `TRUE` will calculate ratio of measured size (ha) to nominal size (ha) and assume unmeasured portions are unproductive, otherwise will use nominal size (ha) and assume the entire plot is productive.  
 #' Also, if using `meas_num = 0` there is a higher chance fully productive plots being incompletely measured (due to cost issues). See page 12 of \link[https://nfi.nfis.org/resources/groundplot/GP_compilation_procedures_2.4.pdf]{Compilation Procedures}
+#' @param fill_survey_age Logical. Fill SurveyAge for t-1 when SurveyAge is available for time t. 
+#' 
+#' Important: SurveyAge is extracted from site_age variable in NFI table all_gp_ltp_header.csv. site_age variable is calculated as the average age of all trees in the plot and may not align with time lapsed between re measurements.
+#' For example, nfi_plot 916316 has site_age of 52 at meas_num == 0 and 59 at meas_num == 1 (7 years of difference) even though they were measured 12 years apart.
 #' @param provinces Vector of strings. Provinces for which you want data for. Will only retrieve data for one of the four provinces in the argument default.
 #' @param model_variant Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.
 #' @param include_small_trees Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.
@@ -74,6 +78,7 @@ nfi_to_osm <- function(nfi_folder,
                        scenario_name = "nfi_simulation",
                        remeasurement_number = NULL,
                        calculate_stockable = TRUE,
+                       fill_age_gaps = TRUE,
                        provinces = c("New Brunswick", "Prince Edward Island", "Nova Scotia", "Newfoundland and Labrador"),
                        model_variant = c("Acadian", "Newfoundland and Labrador"),
                        include_small_trees = TRUE,
@@ -121,12 +126,12 @@ nfi_to_osm <- function(nfi_folder,
   # Location change (loc_id) may not impact model setup.
   # stand_table[loc_id == 0,]
   
-  ## Survey Year --------------------------------------------------------------
+  ## Survey Year ---------------------------------------------------------------
   # Create year variable and remove intermediate variables used to calculate LAT and LONG
   stand_table[, SurveyYear := tidyr::separate(.SD, col = meas_date, into = "meas_yr", sep = "-", extra = "drop"), .SDcols = "meas_date"]
   stand_table[, SurveyYear := as.integer(SurveyYear)]
   
-  ## Survey Age ---------------------------------------------------------------
+  ## Survey Age ----------------------------------------------------------------
   # Read ltp_tree_header
   ltp_header_path <- grep(x = file_list, pattern =  "ltp_header.csv", value = TRUE)
   ltp_header <- fread(ltp_header_path)
@@ -140,10 +145,42 @@ nfi_to_osm <- function(nfi_folder,
   
   data.table::setnames(stand_table, old = "site_age", new = "SurveyAge")
   
-  ## Plots --------------------------------------------------------------------
+  
+  if(fill_age_gaps){
+  message("fill_age_gaps = TRUE | filling SurveyAge for time 't-1' where SurveyAge for time 't' is available")  
+    # Filling SurveyAge gaps
+    # Order data to make logic easier
+    setorder(stand_table, nfi_plot, loc_id, meas_num)
+    
+    # Step 2: Fill lower SurveyAges when higher ones exist
+    stand_table <- stand_table[, SurveyAge := {
+      # check which entries are missing SurveyAge
+      filled <- SurveyAge
+      
+      if (any(is.na(SurveyAge)) && any(!is.na(SurveyYear))) {
+        # Get last known SurveyAge and year (from the max meas_num)
+        known_idx <- which(!is.na(SurveyAge))
+        last_idx <- max(known_idx)
+        
+        # Fill earlier NAs only if they come before known value
+        if (last_idx > 1) {
+          for (i in seq_len(last_idx - 1)) {
+            if (is.na(filled[i])) {
+              years_diff <- SurveyYear[last_idx] - SurveyYear[i]
+              filled[i] <- SurveyAge[last_idx] - years_diff
+            }
+          }
+        }
+      }
+      filled
+    }, by = .(nfi_plot, loc_id)]
+  }
+  
+  
+  ## Plots ---------------------------------------------------------------------
   stand_table[,Plots := 1]
   
-  ## Stockable ----------------------------------------------------------------
+  ## Stockable -----------------------------------------------------------------
   # If measured is chosen 
   if(calculate_stockable){
     message("Calculating 'Stockable' as measured plot size / nominal plot size (where both data exists).\n\n")
@@ -156,7 +193,7 @@ nfi_to_osm <- function(nfi_folder,
                                      1)
   ]
   
-  ## Convert UTM to Lat Long --------------------------------------------------
+  ## Convert UTM to Lat Long ---------------------------------------------------
   # First, create a function to convert UTM to lat/lon
   utm_to_longlat <- function(easting, northing, zone) {
     # Create an SF object
@@ -229,7 +266,7 @@ nfi_to_osm <- function(nfi_folder,
     
   }
   
-  # --- Management (Extra column) ---------------------------------------------
+  # --- Management (Extra column) ----------------------------------------------
   treatment_path <- grep(x = file_list, pattern =  "all_gp_treatment.csv", value = TRUE)
   treatment <- fread(treatment_path, select = c("nfi_plot", "loc_id", "meas_date", "meas_num", "treat_type", "treat_yr"))
   
@@ -241,13 +278,13 @@ nfi_to_osm <- function(nfi_folder,
                                               fifelse(treat_type == "PT" & treat_last25_yt, "PCT", "None")))]
   
   
-  # --- BGI -------------------------------------------------------------------
+  # --- BGI --------------------------------------------------------------------
   if (model_variant == "Acadian"){
   stand_table <- merge(stand_table, bgi_values, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "province"), all.x = TRUE)
   }
   stand_table <- stand_table[,..column_order]
   
-  # --- Tree Table ------------------------------------------------------------
+  # --- Tree Table -------------------------------------------------------------
   
   # Prepare species list found on the Acadian model to be merged with nfi data. We want the proper species code to use on OSM.
   acadian_splist_dt <- copy(acadian_species_list)
@@ -403,6 +440,23 @@ nfi_to_osm <- function(nfi_folder,
   }
   
   
+  # Correct tree status
+  message("Correcting previous tree status | where trees were 'Dead' in previous but 'Live' in current, change previous status to 'Live'.")
+  
+  tree_table[, `:=`(
+    next_status   = shift(tree_status, type = "lead")
+  ), by = .(nfi_plot, loc_id, tree_num)]
+
+  tree_table[, tree_status_corr := fifelse(next_status == "Live" & tree_status == "Dead" & !is.na(next_status),
+                                           "Live", tree_status)]
+  # Print some reports
+  status_corrected <- tree_table[next_status == "Live" & tree_status == "Dead" & !is.na(next_status)]
+  status_corrected <- status_corrected[,.(status_corr_message = paste0("nfi_plot: ", nfi_plot, "\tloc_id: ", loc_id, "\tmeas_num: ", meas_num, "\ttree_num:", paste(tree_num, collapse = ", "))), by = .(nfi_plot, loc_id, meas_num)]
+  n_status_corrected <- status_corrected |> nrow()
+  
+  message(paste0(n_status_corrected, " tree records corrected in:\n\t", 
+                 paste(status_corrected$status_corr_message, collapse = "\n\t")))
+  
   ## --- Expansion Factor (Stems) ----------------------------------------------
   if(dbh_filter > 0) message("Including only trees with DBH >= ", dbh_filter, "\n\n")
   tree_table <- tree_table[DBH >= dbh_filter]
@@ -414,9 +468,10 @@ nfi_to_osm <- function(nfi_folder,
   
   ## ToCut = NaN --------------
   ## Weight = NaN -------------
-  ## HTK = NaN ----------------
+  ## HTK ----------------
+  # Dealt with when preparing tree tables above.
   
-  ## --- Crown Ratio (CR) -------------------------------------------------------
+  ## --- Crown Ratio (CR) ------------------------------------------------------
   # Crown condition 1 all foliage, branch and twigs present. 2 is some or small foliage lost but branches and twigs present, 3+ major loss.
   # Crown base and top can have missing data.
   # Stem condition (I = Intact, B = Broken, M = Missing) Not considering stem condition.
@@ -424,33 +479,106 @@ nfi_to_osm <- function(nfi_folder,
   tree_table[,CR := fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & is.na(crown_top), (crown_top-crown_base)/HT,
                             fifelse(crown_cond > 0 & crown_cond <= 2.5 & !is.na(crown_base) & !is.na(HT), (HT-crown_base)/HT,
                                     NA))]
-  ## DBHI = NaN --------
-  # = possible but skip
-  ## HTI = NaN ---------
-  # = possible but skip
+  ## --- DBHI ------------------------------------------------------------------
+  # Extract numeric year from meas_date (format "YYYY-MMM-DD")
+  tree_table[, year := year(as.IDate(meas_date, format = "%Y-%b-%d"))]
   
-  ## --- Origin  ----------------------------------------------------------------
+  # Order for lead/lag operations
+  setorder(tree_table, nfi_plot, loc_id, tree_num, meas_num)
+  
+  # Calculate DBH and HT increment
+  tree_table[, `:=`(
+    next_DBH      = shift(DBH, type = "lead"),
+    next_HT       = shift(HT, type = "lead"),
+    next_year     = shift(year, type = "lead"),
+    next_status   = shift(tree_status, type = "lead")
+  ), by = .(nfi_plot, loc_id, tree_num)]
+  
+  # Apply increment calculations only if both measurements are live and non-NA
+  tree_table[, DBHI := fifelse(
+    tree_status == "Live" & next_status == "Live" & !is.na(DBH) & !is.na(next_DBH),
+    (next_DBH - DBH) / (next_year - year),
+    NA_real_
+  )]
+  
+  ## --- HTI -------------------------------------------------------------------
+  
+  tree_table[, HTI := fifelse(
+    tree_status == "Live" & next_status == "Live" & !is.na(HT) & !is.na(next_HT),
+    (next_HT - HT) / (next_year - year),
+    NA_real_
+  )]
+  
+  # Clean up helper columns
+  tree_table[, c("next_DBH", "next_HT", "next_year", "next_status") := NULL]
+  
+  ## --- Origin  ---------------------------------------------------------------
   # Some data possible from plot_origin.csv variables 'veg_origin' and 'regen_type'
   
-  ## --- Born -------------------------------------------------------------------
+  ## --- Born ------------------------------------------------------------------
   age_path <- grep(x = file_list, pattern = "tree_age.csv", value = TRUE)
   message("Getting 'Born' variable from tree age table.\n\n")
   age_table <- fread(age_path, select = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num", "age_total"))
   tree_table <- merge(tree_table, age_table, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num"), all.x = TRUE)
-  data.table::setnames(tree_table, old = "tree_num", new = "TreeID")
   
+  message("Filling tree age when age is available for time 't' but is missing at time 't-1'.\n\t - Only applies to trees that were large trees (DBH > 9) in both 't' and 't-1'.\n\t - Calculated as age at time 't' minus time lapsed (years) between time 't' and time 't-1'.")
+  # Filling age_total gaps
+  # Order data to make logic easier
+  setorder(tree_table, nfi_plot, loc_id, meas_num, tree_num)
+  
+  # Step 2: Fill lower SurveyAges when higher ones exist
+  tree_table <- tree_table[, age_total := {
+    # check which entries are missing SurveyAge
+    filled <- age_total
+    
+    if (any(is.na(age_total)) && any(!is.na(age_total))) {
+      # Get last known age_total and year (from the max meas_num)
+      known_idx <- which(!is.na(age_total))
+      last_idx <- max(known_idx)
+      
+      # Fill earlier NAs only if they come before known value
+      if (last_idx > 1) {
+        for (i in seq_len(last_idx - 1)) {
+          if (is.na(filled[i])) {
+            years_diff <- year[last_idx] - year[i]
+            filled[i] <- age_total[last_idx] - years_diff
+          }
+        }
+      }
+    }
+    filled
+  }, by = .(nfi_plot, loc_id, tree_num)]
   
   ## --- Died ------------------------------------------------------------------
-  #  = estimate between measurements or 9999
-  
+  # NFI possible status for awareness 
   # DS = Dead fallen, LF = Live Fallen, LS = Live Stading, M = Missing.
-  # Assumes all which are not dead to be live standing.
-  message("Identifying dead trees. They will be assumed to have died 7 years ago as per OSM defaults.\n\n")
-  tree_table[,Died := fifelse(tree_status == "Dead", 9999, 0)]
+  #  = estimate between measurements or 9999
+  message("Identifying dead trees. They will be assumed to have died at the mid-year between previous and current remeasurement year. Tree that were 'Dead' at establishment will be assumed to have died 7 years ago as per OSM defaults.\n\n")
+  
+  # Order for detection
+  setorder(tree_table, nfi_plot, loc_id, tree_num, meas_num)
+  
+  # Shift previous status and year forward
+  tree_table[, `:=`(
+    prev_status = shift(tree_status, type = "lag"),
+    prev_year   = shift(year, type = "lag")
+  ), by = .(nfi_plot, loc_id, tree_num)]
+  
+  # Calculate year of death as midpoint
+  tree_table[, Died := fifelse(
+    tree_status == "Dead" & prev_status == "Live" & !is.na(prev_year) & !is.na(year),
+    floor((prev_year + year) / 2), fifelse(tree_status == "Dead" & meas_num == 0,
+                                           9999, NA_integer_)
+  )]
+  
+  tree_table[, c("prev_year", "prev_status") := NULL]
+  
 
   ## Risk = 0 ------------------------------------------------------------------
   ## Grade = 0 -----------------------------------------------------------------
   ## Wrap-up -------------------------------------------------------------------
+  
+  data.table::setnames(tree_table, old = "tree_num", new = "TreeID")
   
   # Create ids like in standplot
   if(is.null(remeasurement_number)){
@@ -477,7 +605,7 @@ nfi_to_osm <- function(nfi_folder,
     stand_table_column_order <- c("Scenario", "SurveyID", "SurveyYear", "SurveyAge", "Plots", "Stockable", "X", "Y", "Management")
   }
   stand_table <- stand_table[,..stand_table_column_order]
-  tree_table_column_order <- c("SurveyID", "TreeID", "Species", "DBH", "HT", "Stems", "CR", "Born", "Died")
+  tree_table_column_order <- c("SurveyID", "TreeID", "Species", "DBH", "HT", "DBHI", "HTI", "Stems", "CR", "Born", "Died")
   tree_table <- tree_table[,..tree_table_column_order]
   
   # Checking for errors or missed merges.
