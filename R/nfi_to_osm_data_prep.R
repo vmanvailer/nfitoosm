@@ -147,7 +147,7 @@ nfi_to_osm <- function(nfi_folder,
   
   
   if(fill_age_gaps){
-  message("fill_age_gaps = TRUE | filling SurveyAge for time 't-1' where SurveyAge for time 't' is available")  
+  message("fill_age_gaps = TRUE | filling SurveyAge for time 't-1' where SurveyAge for time 't' is available\n\n")  
     # Filling SurveyAge gaps
     # Order data to make logic easier
     setorder(stand_table, nfi_plot, loc_id, meas_num)
@@ -160,7 +160,7 @@ nfi_to_osm <- function(nfi_folder,
       if (any(is.na(SurveyAge)) && any(!is.na(SurveyYear))) {
         # Get last known SurveyAge and year (from the max meas_num)
         known_idx <- which(!is.na(SurveyAge))
-        last_idx <- max(known_idx)
+        last_idx <- suppressWarnings(max(known_idx))
         
         # Fill earlier NAs only if they come before known value
         if (last_idx > 1) {
@@ -455,7 +455,7 @@ nfi_to_osm <- function(nfi_folder,
   n_status_corrected <- status_corrected |> nrow()
   
   message(paste0(n_status_corrected, " tree records corrected in:\n\t", 
-                 paste(status_corrected$status_corr_message, collapse = "\n\t")))
+                 paste(status_corrected$status_corr_message, collapse = "\n\t"), "\n\n"))
   
   ## --- Expansion Factor (Stems) ----------------------------------------------
   if(dbh_filter > 0) message("Including only trees with DBH >= ", dbh_filter, "\n\n")
@@ -517,11 +517,11 @@ nfi_to_osm <- function(nfi_folder,
   
   ## --- Born ------------------------------------------------------------------
   age_path <- grep(x = file_list, pattern = "tree_age.csv", value = TRUE)
-  message("Getting 'Born' variable from tree age table.\n\n")
+  message("Getting 'Born' variable from tree age table.\n")
   age_table <- fread(age_path, select = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num", "age_total"))
   tree_table <- merge(tree_table, age_table, by = c("nfi_plot", "loc_id", "meas_date", "meas_num", "tree_num"), all.x = TRUE)
   
-  message("Filling tree age when age is available for time 't' but is missing at time 't-1'.\n\t - Only applies to trees that were large trees (DBH > 9) in both 't' and 't-1'.\n\t - Calculated as age at time 't' minus time lapsed (years) between time 't' and time 't-1'.")
+  message("Filling tree age when age is available for time 't' but is missing at time 't-1'.\n\t - Only applies to trees that were large trees (DBH > 9) in both 't' and 't-1'.\n\t - Calculated as age at time 't' minus time lapsed (years) between time 't' and time 't-1'.\n\n")
   # Filling age_total gaps
   # Order data to make logic easier
   setorder(tree_table, nfi_plot, loc_id, meas_num, tree_num)
@@ -534,7 +534,7 @@ nfi_to_osm <- function(nfi_folder,
     if (any(is.na(age_total)) && any(!is.na(age_total))) {
       # Get last known age_total and year (from the max meas_num)
       known_idx <- which(!is.na(age_total))
-      last_idx <- max(known_idx)
+      last_idx <- suppressWarnings(max(known_idx))
       
       # Fill earlier NAs only if they come before known value
       if (last_idx > 1) {
