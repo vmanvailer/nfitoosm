@@ -1,6 +1,6 @@
 Package: nfitoosm
 Title: NFI to OSM
-Version: 1.0.0.0000
+Version: 1.0.1.0000
 Authors@R: 
     person("Vinicius", "Manvailer", , "vmgoncal@ualberta.ca", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-6529-4474"))
