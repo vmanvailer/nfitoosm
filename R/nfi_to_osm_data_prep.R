@@ -28,7 +28,8 @@
 #' For example, nfi_plot 916316 has site_age of 52 at meas_num == 0 and 59 at meas_num == 1 (7 years of difference) even though they were measured 12 years apart.
 #' @param provinces Vector of strings. Provinces for which you want data for. Will only retrieve data for one of the four provinces in the argument default.
 #' @param model_variant Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.
-#' @param include_small_trees Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.
+#' @param only_remeasured_trees Logical. Defaults to FALSE to maximize data use. Ignored if querying a single re measurement number. Will include ingrowth trees and remeasured trees. Ingrowth trees are small trees that crossed the threshold of DBH >= 9cm between remeasurements. May cause large increase in biomass.
+#' @param include_small_trees Logical. Defaults to true to maximize data use and ignored if only_remeasured_trees = TRUE. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.
 #' @param dbh_filter Numeric. A field to filter out trees based on DBH. Will pick DBH higher than or equal to this value.
 #' @param output_path String. Use to output the SQLite database that can be passed to OSM. 
 #' @return Returns a list with two data frames (data.tables) and a writes a database on specified output_path. The data frames should match the input data exactly as in \link[https://forusresearch.com/downloads/osm/help/OSM.HelpFiles/OSM.Input.htm]{Open Stand Model}.
@@ -81,6 +82,7 @@ nfi_to_osm <- function(nfi_folder,
                        fill_age_gaps = TRUE,
                        provinces = c("New Brunswick", "Prince Edward Island", "Nova Scotia", "Newfoundland and Labrador"),
                        model_variant = c("Acadian", "Newfoundland and Labrador"),
+                       only_remeasured_trees = FALSE,
                        include_small_trees = TRUE,
                        dbh_filter = 1,
                        output_path = getwd()
@@ -285,17 +287,6 @@ nfi_to_osm <- function(nfi_folder,
   stand_table <- stand_table[,..column_order]
   
   # --- Tree Table -------------------------------------------------------------
-  
-  # Prepare species list found on the Acadian model to be merged with nfi data. We want the proper species code to use on OSM.
-  acadian_splist_dt <- copy(acadian_species_list)
-  setDT(acadian_splist_dt)
-  acadian_gnsp_only <- acadian_splist_dt[, .(GENUS, SPECIES, OSM_AD_CmdKey)]
-  acadian_gnsp_only[, `:=` (NFI_GENUS = toupper(substr(GENUS, 1, 4)),
-                            NFI_SPECIES = toupper(substr(SPECIES, 1, 3))
-  )]
-  acadian_gnsp_only[, NFI_SPECIES := fifelse(SPECIES == "saccharum", "SAH", NFI_SPECIES)]
-  
-  
   ## --- Large Tree Table ------------------------------------------------------
   # Read ltp_tree 
   ltp_tree_path <- grep(x = file_list, pattern =  "ltp_tree.csv", value = TRUE)
@@ -337,111 +328,97 @@ nfi_to_osm <- function(nfi_folder,
     tree_size = "Large"
   )]
   
-  map_tree_species <- function(tree_table) {
-  species_columns <- c("tree_genus", "tree_species")
+  if(dbh_filter > 0) message("Excluding trees with DBH < ", dbh_filter, "cm\n\n")
+  large_tree_table <- large_tree_table[DBH >= dbh_filter]
   
-  # Step 1: Add Softwood/Hardwood GROUP info
-  tree_table <- merge(tree_table,
-                      unique(nfi_species[, .(GROUP, CODE_GENU, CODE_SPEC)]),
-                      by.x = species_columns,
-                      by.y = c("CODE_GENU", "CODE_SPEC"),
-                      all.x = TRUE)
-  
-  # Step 2: Full genus + species match to OSM species list
-  tree_table <- merge(tree_table,
-                      acadian_gnsp_only[NFI_SPECIES != "SPP", .(NFI_GENUS, NFI_SPECIES, OSM_AD_CmdKey)],
-                      by.x = species_columns,
-                      by.y = c("NFI_GENUS", "NFI_SPECIES"),
-                      all.x = TRUE)
-  
-  # Step 3: Fallback match on genus only where species match failed
-  unmatched <- is.na(tree_table$OSM_AD_CmdKey)
-  
-  if (any(unmatched)) {
-    genus_only_lookup <- acadian_gnsp_only[NFI_SPECIES == "SPP", .(NFI_GENUS, OSM_AD_CmdKey)]
+  # If more than one remeasurement period was select and user does not want to include small trees, 
+  # I assume user only wants trees that have been
+  if((is.null(remeasurement_number) | length(remeasurement_number) > 1) & only_remeasured_trees){
+    message("Excluding any large trees that have not been remeasured (at least once).")
+    # Ensure data.table and ordered by measurement
+    setorder(large_tree_table, nfi_plot, loc_id, tree_num, meas_num)
     
-    tree_table[unmatched, 
-      OSM_AD_CmdKey := genus_only_lookup[.SD, 
-                                            on = .(NFI_GENUS = tree_genus),
-                                            x.OSM_AD_CmdKey]]
+    # Flag whether this tree appears in a *future* meas_num
+    # This includes all multiple measurements except the last one. Not usefull when only two measurements are available.
+    # tree_table[, is_remeasured := .N > 1, by = .(nfi_plot, loc_id, tree_num)]    
+    large_tree_table[, is_remeasured := .N > 1, by = .(nfi_plot, loc_id, tree_num)]    
+    large_tree_table <- large_tree_table[is_remeasured == TRUE]
   }
-
-  # Step 4: Final fallback if no genus match either → OS (Softwood), OH (Hardwood), or XX
-  tree_table[, OSM_AD_CmdKey := fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Softwood", "OS",
-                                 fifelse(is.na(OSM_AD_CmdKey) & GROUP == "Hardwood", "OH",
-                                 fifelse(is.na(OSM_AD_CmdKey), "XX", OSM_AD_CmdKey)))]
-
-  return(tree_table)
-}
   
   tree_table <- map_tree_species(tree_table = large_tree_table)
   
   ## --- Small Tree Table ------------------------------------------------------
-  if(include_small_trees){
-    message("Including small trees.\n\n")
+  if(only_remeasured_trees){
     
-    # Read stp_tree and stp_header
-    stp_header_path <- grep(x = file_list, pattern =  "stp_header.csv", value = TRUE)
-    stp_tree_path <- grep(x = file_list, pattern =  "stp_tree.csv", value = TRUE)
+    message("only_remeasured_trees = TRUE. Skipping small tree processing")
     
-    stp_header <- fread(stp_header_path)
-    stp_tree <- fread(stp_tree_path)
+  } else if(include_small_trees) {
     
-    # Merge the two tables
-    small_tree_table <- merge(stp_tree, stp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"), all.x = TRUE)
-    
-    # Filter for selected measurement number
-    if(!is.null(remeasurement_number)){
-      small_tree_table <- small_tree_table[meas_num == remeasurement_number]
-    }
-    
-    # Filter only the nfi plots to be used.
-    small_tree_table <- small_tree_table[nfi_plot %in% unique(stand_table$nfi_plot)]
-    
-    # Find max tree_num per plot and meas_num in large trees
-    max_large_ids <- tree_table[, .(max_large_id = max(tree_num, na.rm = TRUE)),
-                                by = .(nfi_plot, meas_num)]
-    
-    # Join with small tree table
-    small_tree_table <- merge(small_tree_table, max_large_ids, by = c("nfi_plot", "meas_num"), all.x = TRUE)
-    
-    # Replace NAs (if no large trees in plot/meas_num) with 0
-    small_tree_table[is.na(max_large_id), max_large_id := 0]
-    
-    # Renumber small tree IDs to continue from large tree IDs
-    small_tree_table[, tree_num := max_large_id + .I, by = .(nfi_plot, meas_num)]
-    
-    # Drop helper column
-    small_tree_table[, max_large_id := NULL]
-    
-    # Select and rename columns for small tree table
-    small_tree_table <- small_tree_table[, .(
-      nfi_plot = nfi_plot,
-      loc_id = loc_id,
-      meas_num = meas_num,
-      meas_date = meas_date,
-      meas_plot_size = meas_plot_size,
-      nom_plot_size = nom_plot_size,
-      tree_num = tree_num,
-      tree_genus = smtree_genus,
-      tree_species = smtree_species,
-      DBH = smtree_dbh,
-      HT = fifelse(stem_cond != "B" & smtree_ht > 0, smtree_ht, fifelse(stem_cond != "B" & smtree_ht < 0 & !is.na(smtree_ht_prj), smtree_ht_prj, NA)),
-      HTK = fifelse(stem_cond == "B" & !is.na(smtree_ht_prj) & smtree_ht_prj > 0, smtree_ht_prj, NA),
-      tree_status = fifelse(smtree_status == "DS", "Dead", "Live"),
-      tree_size = "Small"
-    )]
-    
-    small_tree_table <- map_tree_species(tree_table = small_tree_table)
-    order_col <- intersect(names(tree_table), names(small_tree_table))
-    
-    small_tree_table <- small_tree_table[,..order_col]
-    tree_table <- rbindlist(list(tree_table, small_tree_table), fill = TRUE)
-  }
-  
+      message("Including small trees.\n\n")
+      
+      # Read stp_tree and stp_header
+      stp_header_path <- grep(x = file_list, pattern =  "stp_header.csv", value = TRUE)
+      stp_tree_path <- grep(x = file_list, pattern =  "stp_tree.csv", value = TRUE)
+      
+      stp_header <- fread(stp_header_path)
+      stp_tree <- fread(stp_tree_path)
+      
+      # Merge the two tables
+      small_tree_table <- merge(stp_tree, stp_header, by = c("nfi_plot", "loc_id", "meas_date", "meas_num"), all.x = TRUE)
+      
+      # Filter for selected measurement number
+      if(!is.null(remeasurement_number)){
+        small_tree_table <- small_tree_table[meas_num == remeasurement_number]
+      }
+      
+      # Filter only the nfi plots to be used.
+      small_tree_table <- small_tree_table[nfi_plot %in% unique(stand_table$nfi_plot)]
+      
+      # Find max tree_num per plot and meas_num in large trees
+      max_large_ids <- tree_table[, .(max_large_id = max(tree_num, na.rm = TRUE)),
+                                  by = .(nfi_plot, meas_num)]
+      
+      # Join with small tree table
+      small_tree_table <- merge(small_tree_table, max_large_ids, by = c("nfi_plot", "meas_num"), all.x = TRUE)
+      
+      # Replace NAs (if no large trees in plot/meas_num) with 0
+      small_tree_table[is.na(max_large_id), max_large_id := 0]
+      
+      # Renumber small tree IDs to continue from large tree IDs
+      small_tree_table[, tree_num := max_large_id + .I, by = .(nfi_plot, meas_num)]
+      
+      # Drop helper column
+      small_tree_table[, max_large_id := NULL]
+      
+      # Select and rename columns for small tree table
+      small_tree_table <- small_tree_table[, .(
+        nfi_plot = nfi_plot,
+        loc_id = loc_id,
+        meas_num = meas_num,
+        meas_date = meas_date,
+        meas_plot_size = meas_plot_size,
+        nom_plot_size = nom_plot_size,
+        tree_num = tree_num,
+        tree_genus = smtree_genus,
+        tree_species = smtree_species,
+        DBH = smtree_dbh,
+        HT = fifelse(stem_cond != "B" & smtree_ht > 0, smtree_ht, fifelse(stem_cond != "B" & smtree_ht < 0 & !is.na(smtree_ht_prj), smtree_ht_prj, NA)),
+        HTK = fifelse(stem_cond == "B" & !is.na(smtree_ht_prj) & smtree_ht_prj > 0, smtree_ht_prj, NA),
+        tree_status = fifelse(smtree_status == "DS", "Dead", "Live"),
+        tree_size = "Small"
+      )]
+      
+      small_tree_table <- map_tree_species(tree_table = small_tree_table)
+      order_col <- intersect(names(tree_table), names(small_tree_table))
+      
+      small_tree_table <- small_tree_table[,..order_col]
+      tree_table <- rbindlist(list(tree_table, small_tree_table), fill = TRUE)
+    } # End of include_small_tree
   
   # Correct tree status
   message("Correcting previous tree status | where trees were 'Dead' in previous but 'Live' in current, change previous status to 'Live'.")
+  # Set order to be able to use shift correctly.
+  setorder(tree_table, nfi_plot, loc_id, meas_num)
   
   tree_table[, `:=`(
     next_status   = shift(tree_status, type = "lead")
@@ -458,11 +435,30 @@ nfi_to_osm <- function(nfi_folder,
                  paste(status_corrected$status_corr_message, collapse = "\n\t"), "\n\n"))
   
   ## --- Expansion Factor (Stems) ----------------------------------------------
-  if(dbh_filter > 0) message("Including only trees with DBH >= ", dbh_filter, "\n\n")
-  tree_table <- tree_table[DBH >= dbh_filter]
   
-  message("Calculating expansion factor as 1/measured plot size\n\n")
-  tree_table[,Stems := fifelse(!is.na(nom_plot_size) & nom_plot_size > 0, (1/nom_plot_size), 1/0.04)]
+  message("Calculating expansion factor as 1/nominal plot size\n\n")
+  # Nominal plot size is used but may vary from one measurement to the next for large trees.
+  # Or they may have not been submitted on establishment and are only present on re measurement.
+  # For OSM those need be uniform across remeasruements
+  setorder(tree_table, nfi_plot, loc_id, meas_num, tree_size)
+  
+  # Check the size of the next re-measurement.
+  tree_table[, `:=`(
+    next_nom_plot_size = shift(nom_plot_size, type = "lead")
+  ), by = .(nfi_plot, loc_id, tree_num, tree_size)]
+  
+  
+  tree_table[,Stems := fifelse(
+    !is.na(nom_plot_size) & nom_plot_size > 0, (1/nom_plot_size),   # If nom_plot_size present, use that
+    fifelse(tree_size == "Small", 1/0.0050,                         # If not, check if it is a small tree and use standard for small trees (0.0050).
+    fifelse(next_nom_plot_size == 0.0405, 1/0.0405, 1/0.04)))]      # If not small, check whether the next measurement has some measurement and use that. Otherwise, default to 0.04.
+  
+  # Backfill this data for previous measurements where missing.
+  tree_table[, `:=`(
+    next_Stems = shift(Stems, type = "lead")
+  ), by = .(nfi_plot, loc_id, tree_num, tree_size)]
+  
+  tree_table[ ,Stems := fifelse(is.na(Stems) & !is.na(next_Stems), next_Stems, Stems)]
   
   # }
   
@@ -615,12 +611,15 @@ nfi_to_osm <- function(nfi_folder,
   unmatched_list <- paste(paste0("\t", in_stand_not_in_tree),  collapse = "\n")
   
   # Warnings and errors
-  if(length(in_stand_not_in_tree)>0 & !include_small_trees){
-    message(paste0("Warning | The NFI plots below have only small trees. Those will be removed since you have set 'include_small_trees = FALSE'\n", unmatched_list, "\n\n"))
+  if(length(in_stand_not_in_tree)>0 & (!include_small_trees | only_remeasured_trees)){
+    message(paste0("Warning | The NFI plots below have only small trees. Those records will be removed from the Stand Table since you have set 'include_small_trees = FALSE' or 'only_remeasured_trees = TRUE'\n", unmatched_list, "\n\n"))
+    stand_table <- stand_table[!SurveyID %in% in_stand_not_in_tree]
+    
   } else if (length(in_stand_not_in_tree)>0 & include_small_trees){
     message(paste0("Warning | NFI plots below could not be matched to tree data. Those will be removed from the Stand List Table\n",
                    "You can double check the source file at\n\t", ltp_tree_path, "\n\n", "for the nfi_plot ids\n", unmatched_list, "\n\n",
                    "If there is an issue, contact the developer.\n"))
+    stand_table <- stand_table[!SurveyID %in% in_stand_not_in_tree]
   }
   
   if(length(in_tree_not_in_stand)>0){

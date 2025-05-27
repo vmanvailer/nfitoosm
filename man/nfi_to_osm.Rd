@@ -9,14 +9,13 @@ nfi_to_osm(
   scenario_name = "nfi_simulation",
   remeasurement_number = NULL,
   calculate_stockable = TRUE,
+  fill_age_gaps = TRUE,
   provinces = c("New Brunswick", "Prince Edward Island", "Nova Scotia",
     "Newfoundland and Labrador"),
   model_variant = c("Acadian", "Newfoundland and Labrador"),
+  only_remeasured_trees = FALSE,
   include_small_trees = TRUE,
-  dbh_filter = 0,
-  use_projected_height = TRUE,
-  calculate_ef_for_dbh_bin = TRUE,
-  ef_dbh_increment_bin = 4,
+  dbh_filter = 1,
   output_path = getwd()
 )
 }
@@ -42,23 +41,18 @@ Also, if using \code{meas_num = 0} there is a higher chance fully productive plo
 
 \item{model_variant}{Vector of string. OSM has two models. The "Acadian" model variant has been calibrated for the provinces of New Brunswick, Prince Edward Island and Nova Scotia. The "Newfoundland and Labrador" model has been calibrated for Newfoundland and Labrador only.}
 
-\item{include_small_trees}{Logical. Defaults to true to maximize data use. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.}
+\item{only_remeasured_trees}{Logical. Defaults to FALSE to maximize data use. Ignored if querying a single re measurement number. Will include ingrowth trees and remeasured trees. Ingrowth trees are small trees that crossed the threshold of DBH >= 9cm between remeasurements. May cause large increase in biomass.}
+
+\item{include_small_trees}{Logical. Defaults to true to maximize data use and ignored if only_remeasured_trees = TRUE. Will include all individual trees measured on the small plot data. See page 32 of \link[https://nfi.nfis.org/resources/groundplot/Gp_guidelines_v5.0.pdf]{Ground Plot Guidelines}.}
 
 \item{dbh_filter}{Numeric. A field to filter out trees based on DBH. Will pick DBH higher than or equal to this value.}
 
-\item{use_projected_height}{Logical. When both (measured, calculated or estimated) height and projected height are available. Prefer projected height. Projected height are calculated for broken stems (i.e. stem_cond == "B").}
-
-\item{calculate_ef_for_dbh_bin}{Logical. Refer to the required OSM column "Stems" and defaults to \code{TRUE}.
-Calculates expansion factors for DBH bins specified in \code{ef_dbh_increment_bin}, instead of for each individual tree. The calculation will first group trees into DBH class sizes (e.g. (0-4],(4-8],(8-12], and etc.).
-It then aggregates data by counting number of trees and averaging DBH and height for each bin.
-Finally the 'Stems' variable is calculate as the count of stem/measured_plot_size (generally 0.04 but sometimes less).
-
-Aggregated Stems, DBH and Height will represent individual trees to be used as input in OSM.
-If \code{FALSE} it will assume each individual tree has an expansion factor of 1/measured_plot_size. This may be less prefered as it gives equal weights to all individual trees in the plot.}
-
-\item{ef_dbh_increment_bin}{Numeric. In centimeters. Only used if \code{calculate_ef_for_dbh_bin = TRUE}.}
-
 \item{output_path}{String. Use to output the SQLite database that can be passed to OSM.}
+
+\item{fill_survey_age}{Logical. Fill SurveyAge for t-1 when SurveyAge is available for time t.
+
+Important: SurveyAge is extracted from site_age variable in NFI table all_gp_ltp_header.csv. site_age variable is calculated as the average age of all trees in the plot and may not align with time lapsed between re measurements.
+For example, nfi_plot 916316 has site_age of 52 at meas_num == 0 and 59 at meas_num == 1 (7 years of difference) even though they were measured 12 years apart.}
 }
 \value{
 Returns a list with two data frames (data.tables) and a writes a database on specified output_path. The data frames should match the input data exactly as in \link[https://forusresearch.com/downloads/osm/help/OSM.HelpFiles/OSM.Input.htm]{Open Stand Model}.
